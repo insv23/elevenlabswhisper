@@ -12,7 +12,17 @@
       "title": "transcribe",
       "subtitle": "speech to text",
       "description": "",
-      "mode": "no-view"
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "soxExecutablePath",
+      "type": "textfield",
+      "title": "SoX Executable Path",
+      "placeholder": "/opt/homebrew/bin/sox",
+      "description": "Absolute path to the sox binary. Leave empty to use PATH or common Homebrew paths.",
+      "required": false
     }
   ],
   "dependencies": {
