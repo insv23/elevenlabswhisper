@@ -5,6 +5,7 @@ import {
 	Form,
 	Keyboard,
 	Toast,
+	Clipboard,
 	getPreferenceValues,
 	openExtensionPreferences,
 	showToast,
@@ -20,6 +21,7 @@ export default function Command() {
 	const { state, startRecording, stopAndTranscribe, cancelRecording, reset } =
 		useTranscription();
 	const [waveformSeed, setWaveformSeed] = useState(0);
+	const [sessionKey, setSessionKey] = useState(0);
 
 	// 检查偏好设置是否缺失
 	const missingPrefReason = useMemo(() => {
@@ -53,6 +55,8 @@ export default function Command() {
 				break;
 			case "success":
 				showToast(Toast.Style.Success, "Transcription Complete");
+				// 更新会话 key，强制成功态表单重挂载，以应用新的 defaultValue
+				setSessionKey(Date.now());
 				break;
 			case "error":
 				showToast(Toast.Style.Failure, "Error", state.error);
@@ -95,12 +99,20 @@ export default function Command() {
 	if (state.status === "success" && state.transcript !== undefined) {
 		return (
 			<Form
+				key={sessionKey}
 				actions={
 					<ActionPanel>
-						<Action.Paste title="Paste Transcript" content={state.transcript} />
-						<Action.CopyToClipboard
-							title="Copy Transcript"
-							content={state.transcript}
+						<Action.SubmitForm
+							title="Paste Edited Transcript"
+							onSubmit={(values: { transcript?: string }) =>
+								Clipboard.paste(values?.transcript ?? "")
+							}
+						/>
+						<Action.SubmitForm
+							title="Copy Edited Transcript"
+							onSubmit={(values: { transcript?: string }) =>
+								Clipboard.copy(values?.transcript ?? "")
+							}
 						/>
 						<Action
 							title="Start New Recording"
@@ -113,7 +125,8 @@ export default function Command() {
 				<Form.TextArea
 					id="transcript"
 					title="Transcript"
-					value={state.transcript}
+					defaultValue={state.transcript}
+					storeValue={false}
 				/>
 			</Form>
 		);
