@@ -23,6 +23,52 @@
       "placeholder": "/opt/homebrew/bin/sox",
       "description": "Absolute path to the sox binary. Leave empty to use PATH or common Homebrew paths.",
       "required": false
+    },
+    {
+      "name": "provider",
+      "type": "dropdown",
+      "title": "Provider",
+      "description": "Choose the transcription provider.",
+      "data": [
+        { "title": "ElevenLabs", "value": "elevenlabs" },
+        { "title": "302.ai", "value": "ai302" }
+      ],
+      "defaultValue": "elevenlabs",
+      "required": true
+    },
+    {
+      "name": "elevenlabsApiKey",
+      "type": "password",
+      "title": "ElevenLabs API Key",
+      "placeholder": "sk_...",
+      "description": "API key used for ElevenLabs requests (header: xi-api-key).",
+      "required": false
+    },
+    {
+      "name": "ai302ApiBaseUrl",
+      "type": "textfield",
+      "title": "302.ai Base URL",
+      "placeholder": "https://api.302.ai/elevenlabs/speech-to-text",
+      "defaultValue": "https://api.302.ai/elevenlabs/speech-to-text",
+      "description": "Full endpoint URL for 302.ai speech-to-text API.",
+      "required": false
+    },
+    {
+      "name": "ai302ApiKey",
+      "type": "password",
+      "title": "302.ai API Key",
+      "placeholder": "sk-...",
+      "description": "API key used for 302.ai requests (Authorization: Bearer <key>).",
+      "required": false
+    },
+    {
+      "name": "modelId",
+      "type": "textfield",
+      "title": "Model ID",
+      "placeholder": "scribe_v1 ",
+      "description": "Model identifier used by the provider.",
+      "defaultValue": "scribe_v1",
+      "required": false
     }
   ],
   "dependencies": {
