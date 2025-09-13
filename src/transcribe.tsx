@@ -10,7 +10,9 @@ import {
 	openExtensionPreferences,
 	showToast,
 	useNavigation,
+	popToRoot,
 } from "@raycast/api";
+
 import { useEffect, useMemo, useState } from "react";
 import { useTranscription } from "./hooks/useTranscription";
 import { renderSyntheticWave } from "./utils/waveform";
@@ -104,9 +106,11 @@ export default function Command() {
 					<ActionPanel>
 						<Action.SubmitForm
 							title="Paste Edited Transcript"
-							onSubmit={(values: { transcript?: string }) =>
-								Clipboard.paste(values?.transcript ?? "")
-							}
+							onSubmit={async (values: { transcript?: string }) => {
+								const text = values?.transcript ?? "";
+								await popToRoot(); // 退回到 Raycast root, 保证下一次打开该插件是自动开始录音
+								await Clipboard.paste(text);
+							}}
 						/>
 						<Action.SubmitForm
 							title="Copy Edited Transcript"
