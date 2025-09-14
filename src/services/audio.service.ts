@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams, exec } from "node:child_process";
 import { getPreferenceValues } from "@raycast/api";
 import path from "node:path";
 import type { Preferences } from "../types/preferences";
@@ -73,6 +73,40 @@ class AudioService {
 		);
 	}
 
+	private async killProcessesUsingFile(filePath: string): Promise<void> {
+		return new Promise((resolve) => {
+			// 使用 lsof 查找正在使用文件的进程
+			exec(`lsof -t "${filePath}"`, (error, stdout) => {
+				if (error || !stdout.trim()) {
+					resolve();
+					return;
+				}
+
+				const pids = stdout.trim().split('\n').filter(pid => pid);
+				for (const pid of pids) {
+					try {
+						process.kill(Number.parseInt(pid), 'SIGTERM');
+					} catch (e) {
+						console.log(`Failed to kill process ${pid}:`, e);
+					}
+				}
+
+				// 延迟后强制杀死可能还在运行的进程
+				setTimeout(() => {
+					for (const pid of pids) {
+						try {
+							process.kill(Number.parseInt(pid), 'SIGKILL');
+						} catch {
+							// 忽略已经终止的进程
+						}
+					}
+					resolve();
+				}, 500);
+			});
+		});
+	}
+
+	
 	private async checkSoxAvailable(
 		pathOrCmd: string,
 		timeoutMs = 1200,
@@ -181,11 +215,21 @@ class AudioService {
 				}
 			});
 
+			// Kill the main process first
 			try {
 				proc.kill("SIGTERM");
 			} catch {
 				/* ignore */
 			}
+
+			// Use lsof to find and kill all processes using the recording file
+			setTimeout(async () => {
+				try {
+					await this.killProcessesUsingFile(outputPath);
+				} catch (e) {
+					console.log("Error killing processes using file:", e);
+				}
+			}, 100);
 		});
 	}
 
@@ -200,11 +244,23 @@ class AudioService {
 			if (outputPath) await storageService.deleteFile(outputPath);
 		});
 
+		// Kill the main process first
 		try {
 			proc.kill("SIGKILL");
 		} catch {
 			/* ignore */
 		}
+
+		// Use lsof to find and kill all processes using the recording file
+		setTimeout(async () => {
+			try {
+				if (outputPath) {
+					await this.killProcessesUsingFile(outputPath);
+				}
+			} catch (e) {
+				console.log("Error killing processes using file:", e);
+			}
+		}, 100);
 	}
 }
 
