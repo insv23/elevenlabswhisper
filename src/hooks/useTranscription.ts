@@ -59,18 +59,8 @@ export function useTranscription() {
     }
   }, []);
 
-  const cancelRecording = useCallback(async () => {
-    try {
-      await audioService.cancel();
-      dispatch({ type: "RESET" });
-    } catch (e) {
-      const err = e as Error;
-      dispatch({ type: "ERROR", payload: err.message || "Cancel failed." });
-    }
-  }, []);
-
   const reset = useCallback(() => dispatch({ type: "RESET" }), []);
 
-  return { state, startRecording, stopAndTranscribe, cancelRecording, reset } as const;
+  return { state, startRecording, stopAndTranscribe, reset } as const;
 }
 

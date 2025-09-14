@@ -20,7 +20,7 @@ import type { Preferences } from "./types/preferences";
 
 export default function Command() {
 	const { pop } = useNavigation();
-	const { state, startRecording, stopAndTranscribe, cancelRecording, reset } =
+	const { state, startRecording, stopAndTranscribe, reset } =
 		useTranscription();
 	const [waveformSeed, setWaveformSeed] = useState(0);
 	const [sessionKey, setSessionKey] = useState(0);
@@ -45,7 +45,7 @@ export default function Command() {
 				showToast(
 					Toast.Style.Animated,
 					"Recording…",
-					"Press Enter to stop, Cmd+. to cancel",
+					"Press Enter to stop, Esc to cancel",
 				);
 				break;
 			case "transcribing":
@@ -156,11 +156,6 @@ export default function Command() {
 				return (
 					<ActionPanel>
 						<Action title="Stop and Transcribe" onAction={stopAndTranscribe} />
-						<Action
-							title="Cancel Recording"
-							onAction={cancelRecording}
-							shortcut={{ modifiers: ["cmd"], key: "." }}
-						/>
 					</ActionPanel>
 				);
 			case "error":
