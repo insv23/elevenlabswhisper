@@ -9,9 +9,9 @@
   "commands": [
     {
       "name": "transcribe",
-      "title": "Transcribe",
-      "subtitle": "speech to text",
-      "description": "Record your audio, send it to elevenlabs api, return the transcript.",
+      "title": "Transcribe Audio",
+      "subtitle": "ElevenLabs & 302.ai",
+      "description": "Record audio and get instant AI-powered transcription.",
       "mode": "view"
     }
   ],
