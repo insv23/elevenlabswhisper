@@ -1,4 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams, exec } from "node:child_process";
+import {
+	spawn,
+	type ChildProcessWithoutNullStreams,
+	exec,
+} from "node:child_process";
 import { getPreferenceValues } from "@raycast/api";
 import path from "node:path";
 import type { Preferences } from "../types/preferences";
@@ -15,18 +19,17 @@ export class SoxError extends Error {
 	}
 }
 
-type ResolveResult = {
-	path: string;
-	source: "pref" | "homebrew-opt" | "homebrew-usr" | "path";
-};
 type CandidateSource = "homebrew-opt" | "homebrew-usr" | "path";
 
 export const WAV_HEADER_SIZE = 44;
 
+export type StartRecordingResult = {
+	proc: ChildProcessWithoutNullStreams;
+	outputPath: string;
+};
+
 class AudioService {
 	private soxPath: string | null = null;
-	private proc: ChildProcessWithoutNullStreams | null = null;
-	private currentRecordingPath: string | null = null;
 
 	private async resolveSoxPath(): Promise<string> {
 		if (this.soxPath) return this.soxPath;
@@ -73,40 +76,6 @@ class AudioService {
 		);
 	}
 
-	private async killProcessesUsingFile(filePath: string): Promise<void> {
-		return new Promise((resolve) => {
-			// 使用 lsof 查找正在使用文件的进程
-			exec(`lsof -t "${filePath}"`, (error, stdout) => {
-				if (error || !stdout.trim()) {
-					resolve();
-					return;
-				}
-
-				const pids = stdout.trim().split('\n').filter(pid => pid);
-				for (const pid of pids) {
-					try {
-						process.kill(Number.parseInt(pid), 'SIGTERM');
-					} catch (e) {
-						console.log(`Failed to kill process ${pid}:`, e);
-					}
-				}
-
-				// 延迟后强制杀死可能还在运行的进程
-				setTimeout(() => {
-					for (const pid of pids) {
-						try {
-							process.kill(Number.parseInt(pid), 'SIGKILL');
-						} catch {
-							// 忽略已经终止的进程
-						}
-					}
-					resolve();
-				}, 500);
-			});
-		});
-	}
-
-	
 	private async checkSoxAvailable(
 		pathOrCmd: string,
 		timeoutMs = 1200,
@@ -141,22 +110,86 @@ class AudioService {
 		});
 	}
 
-	async start(): Promise<string> {
-		if (this.proc) {
-			throw new SoxError(
-				"Recording is already in progress.",
-				"ALREADY_RECORDING",
+	async initialize(): Promise<void> {
+		await this.resolveSoxPath();
+		await storageService.ensureRecordingsDir();
+	}
+
+	private async cleanupOldSoxProcesses(): Promise<void> {
+		try {
+			const { stdout } = await new Promise<{ stdout: string; stderr: string }>(
+				(resolve, reject) => {
+					exec("pgrep -fl sox", (error, stdout, stderr) => {
+						if (error) reject(error);
+						else resolve({ stdout, stderr });
+					});
+				},
 			);
+
+			const processes = stdout.split("\n").filter(Boolean);
+			let killedCount = 0;
+
+			for (const processLine of processes) {
+				if (this.isOurSoxProcess(processLine)) {
+					const pid = Number.parseInt(processLine.split(" ")[0]);
+					if (!Number.isNaN(pid)) {
+						try {
+							process.kill(pid, "SIGTERM");
+							await new Promise((resolve) => setTimeout(resolve, 100));
+
+							try {
+								process.kill(pid, "SIGKILL");
+								console.log(`Cleaned up orphaned SoX processes, pid=${pid}`);
+							} catch {
+								// Process already exited
+							}
+							killedCount++;
+						} catch (error) {
+							console.warn(`Failed to kill process ${pid}:`, error);
+						}
+					}
+				}
+			}
+
+			if (killedCount > 0) {
+				console.log(`Cleaned up ${killedCount} orphaned SoX processes`);
+			}
+		} catch (error) {
+			// pgrep 没有找到 sox 进程是正常的
+			if (
+				error instanceof Error &&
+				(error.message.includes("No such process") ||
+					error.message.includes("no process found"))
+			) {
+				return;
+			}
+			console.warn("Error cleaning up old sox processes:", error);
 		}
+	}
+
+	private isOurSoxProcess(processLine: string): boolean {
+		const uniqueArgs = [
+			"--no-show-progress",
+			"-d",
+			"-t wav",
+			"--channels 1",
+			"--rate 16000",
+			"--encoding signed-integer",
+			"--bits 16",
+		];
+
+		return uniqueArgs.every((arg) => processLine.includes(arg));
+	}
+
+	async start(options: { outputPath: string }): Promise<StartRecordingResult> {
+		// 先清理旧的 SoX 进程
+		await this.cleanupOldSoxProcesses();
 
 		const sox = await this.resolveSoxPath();
-		await storageService.ensureRecordingsDir();
-
-		const filename = storageService.getRecordingFilename();
-		const outputPath = path.join(storageService.recordingsDir, filename);
-		this.currentRecordingPath = outputPath;
+		const { outputPath } = options;
 
 		const args = [
+			"--no-show-progress",
 			"-d",
 			"-t",
 			"wav",
@@ -171,96 +204,51 @@ class AudioService {
 			outputPath,
 		];
 
-		try {
-			this.proc = spawn(sox, args);
-			this.proc.stderr.on("data", (data) => console.log(`sox stderr: ${data}`));
-			return outputPath;
-		} catch (e) {
-			this.proc = null;
-			throw new SoxError("Failed to start SoX process.", "SOX_SPAWN_FAILED", e);
-		}
+		const proc = spawn(sox, args, { detached: true });
+		// Sox prints to stderr often; keep for debugging
+		proc.stderr.on("data", (data) => console.log(`sox stderr: ${data}`));
+		return { proc, outputPath };
 	}
 
-	async stop(): Promise<string> {
-		if (!this.proc)
-			throw new SoxError(
-				"No recording is currently in progress.",
-				"NOT_RECORDING",
-			);
-		if (!this.currentRecordingPath)
-			throw new SoxError("Output path is missing.", "MISSING_PATH");
+	private killChildGracefully(
+		proc: ChildProcessWithoutNullStreams,
+		timeoutMs = 800,
+	): Promise<void> {
+		return new Promise((resolve) => {
+			let done = false;
+			const finish = () => {
+				if (done) return;
+				done = true;
+				resolve();
+			};
 
-		const proc = this.proc;
-		const outputPath = this.currentRecordingPath;
-
-		return new Promise((resolve, reject) => {
-			proc.once("close", async () => {
-				this.proc = null;
-				this.currentRecordingPath = null;
-				try {
-					const size = await storageService.getFileSize(outputPath);
-					if (size <= WAV_HEADER_SIZE) {
-						await storageService.deleteFile(outputPath);
-						reject(
-							new SoxError(
-								"No audio was captured. The recording is empty.",
-								"EMPTY_RECORDING",
-							),
-						);
-					} else {
-						resolve(outputPath);
-					}
-				} catch (e) {
-					reject(e);
-				}
-			});
-
-			// Kill the main process first
+			proc.once("close", () => finish());
+			// Try TERM to allow WAV header/footer to flush
 			try {
 				proc.kill("SIGTERM");
 			} catch {
 				/* ignore */
 			}
 
-			// Use lsof to find and kill all processes using the recording file
-			setTimeout(async () => {
+			setTimeout(() => {
+				if (done) return;
 				try {
-					await this.killProcessesUsingFile(outputPath);
-				} catch (e) {
-					console.log("Error killing processes using file:", e);
+					proc.kill("SIGKILL");
+				} catch {
+					/* ignore */
 				}
-			}, 100);
+				// give a little time after SIGKILL
+				setTimeout(() => finish(), 100);
+			}, timeoutMs);
 		});
 	}
 
-	async cancel(): Promise<void> {
-		if (!this.proc) return;
-		const proc = this.proc;
-		const outputPath = this.currentRecordingPath;
-		this.proc = null;
-		this.currentRecordingPath = null;
+	async stop(proc: ChildProcessWithoutNullStreams): Promise<void> {
+		await this.killChildGracefully(proc);
+	}
 
-		proc.once("close", async () => {
-			if (outputPath) await storageService.deleteFile(outputPath);
-		});
-
-		// Kill the main process first
-		try {
-			proc.kill("SIGKILL");
-		} catch {
-			/* ignore */
-		}
-
-		// Use lsof to find and kill all processes using the recording file
-		setTimeout(async () => {
-			try {
-				if (outputPath) {
-					await this.killProcessesUsingFile(outputPath);
-				}
-			} catch (e) {
-				console.log("Error killing processes using file:", e);
-			}
-		}, 100);
+	async cancel(proc: ChildProcessWithoutNullStreams): Promise<void> {
+		await this.killChildGracefully(proc, 300);
 	}
 }
 
