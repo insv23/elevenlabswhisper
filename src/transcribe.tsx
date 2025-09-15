@@ -9,7 +9,6 @@ import {
 	getPreferenceValues,
 	openExtensionPreferences,
 	showToast,
-	useNavigation,
 	popToRoot,
 } from "@raycast/api";
 
@@ -19,11 +18,11 @@ import { renderSyntheticWave } from "./utils/waveform";
 import type { Preferences } from "./types/preferences";
 
 export default function Command() {
-	const { pop } = useNavigation();
 	const { state, startRecording, stopAndTranscribe, reset } =
 		useTranscription();
 	const [waveformSeed, setWaveformSeed] = useState(0);
 	const [sessionKey, setSessionKey] = useState(0);
+	const [autoStarted, setAutoStarted] = useState(false);
 
 	// 检查偏好设置是否缺失
 	const missingPrefReason = useMemo(() => {
@@ -66,12 +65,19 @@ export default function Command() {
 		}
 	}, [state.status, state.error]);
 
-	// 自动开始录音
+
+	// 自动开始录音（一次性）
 	useEffect(() => {
-		if (state.status === "idle" && !missingPrefReason) {
+		if (state.status === "idle" && !missingPrefReason && !autoStarted) {
+			setAutoStarted(true);
 			startRecording();
 		}
-	}, [state.status, missingPrefReason, startRecording]);
+	}, [state.status, missingPrefReason, startRecording, autoStarted]);
+
+	const handleReset = () => {
+		setAutoStarted(false);
+		reset();
+	};
 
 	// 录音时更新波形图动画
 	useEffect(() => {
@@ -120,7 +126,7 @@ export default function Command() {
 						/>
 						<Action
 							title="Start New Recording"
-							onAction={reset}
+							onAction={handleReset}
 							shortcut={Keyboard.Shortcut.Common.New}
 						/>
 					</ActionPanel>

@@ -1,66 +1,61 @@
-import { useCallback, useReducer } from "react";
-import { audioService } from "../services/audio.service";
-import { transcriptionService } from "../services/transcription.service";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { recordingStore, type RecordingState } from "../store/recording.store";
+import { recorderController } from "../controllers/recorder.controller";
 
-type State = {
-  status: "idle" | "recording" | "transcribing" | "success" | "error";
+type UiStatus = "idle" | "recording" | "transcribing" | "success" | "error";
+
+type UiState = {
+  status: UiStatus;
   transcript?: string;
   error?: string;
 };
 
-type Action =
-  | { type: "RECORD_START" }
-  | { type: "TRANSCRIBE_START" }
-  | { type: "SUCCESS"; payload: string }
-  | { type: "ERROR"; payload: string }
-  | { type: "RESET" };
-
-const initialState: State = { status: "idle" };
-
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "RECORD_START":
-      return { status: "recording" };
-    case "TRANSCRIBE_START":
-      return { ...state, status: "transcribing" };
-    case "SUCCESS":
-      return { status: "success", transcript: action.payload };
-    case "ERROR":
-      return { status: "error", error: action.payload };
-    case "RESET":
-      return { status: "idle" };
-    default:
-      return state;
+function toUiStatus(storeStatus: RecordingState['status']): UiStatus {
+  switch (storeStatus) {
+    case "idle":
+      return "idle";
+    case "starting":
+    case "recording":
+      return "recording";
+    case "stopping":
+    case "transcribing":
+      return "transcribing";
+    case "success":
+      return "success";
+    case "error":
+      return "error";
   }
 }
 
 export function useTranscription() {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const storeState = useSyncExternalStore(
+    recordingStore.subscribe.bind(recordingStore),
+    recordingStore.get.bind(recordingStore)
+  );
+
+  const state: UiState = {
+    status: toUiStatus(storeState.status),
+    transcript: storeState.transcript,
+    error: storeState.error
+  };
+
+  useEffect(() => {
+    recorderController.initialize().catch((e) => {
+      console.error('Controller initialization failed:', e);
+    });
+  }, []);
 
   const startRecording = useCallback(async () => {
-    try {
-      dispatch({ type: "RECORD_START" });
-      await audioService.start();
-    } catch (e) {
-      const err = e as Error;
-      dispatch({ type: "ERROR", payload: err.message || "Failed to start recording." });
-    }
+    await recorderController.requestStart();
   }, []);
 
   const stopAndTranscribe = useCallback(async () => {
-    try {
-      const filePath = await audioService.stop();
-      dispatch({ type: "TRANSCRIBE_START" });
-      const text = await transcriptionService.transcribe(filePath);
-      dispatch({ type: "SUCCESS", payload: text || "" });
-    } catch (e) {
-      const err = e as Error;
-      dispatch({ type: "ERROR", payload: err.message || "Transcription failed." });
-    }
+    await recorderController.requestStop();
   }, []);
 
-  const reset = useCallback(() => dispatch({ type: "RESET" }), []);
+  const reset = useCallback(() => {
+    recorderController.requestReset();
+  }, []);
 
   return { state, startRecording, stopAndTranscribe, reset } as const;
 }
-
