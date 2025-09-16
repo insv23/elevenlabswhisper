@@ -1,7 +1,6 @@
 import { Action, ActionPanel, Detail, Form, Keyboard, Clipboard, popToRoot } from "@raycast/api";
 import { useCallback } from "react";
 import { useTranscriptionActions, useTranscriptionState } from "./store/transcription.store";
-import { renderSyntheticWave } from "./utils/waveform";
 import { useAutoStart, useEnvironmentGate, useTranscriptionToasts, useWaveformAnimation } from "./hooks/transcribe";
 
 export default function Command() {
@@ -16,7 +15,7 @@ export default function Command() {
     systemReady: systemCheckState.status === "ok" && !guardResult.hasError,
     startRecording,
   });
-  const waveformSeed = useWaveformAnimation(state.status === "recording");
+  const waveformMarkdown = useWaveformAnimation(state.status === "recording");
 
   const handleCancel = useCallback(() => {
     void cancelRecording();
@@ -74,7 +73,7 @@ export default function Command() {
   const getMarkdown = () => {
     switch (state.status) {
       case "recording":
-        return renderSyntheticWave(waveformSeed);
+        return waveformMarkdown;
       case "transcribing":
         return "## Transcribing...\n\nPlease wait while we process your audio.";
       case "transcribing_error":

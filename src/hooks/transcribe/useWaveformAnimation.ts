@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { renderSyntheticWave } from "../../utils/waveform";
 
 export const useWaveformAnimation = (isRecording: boolean) => {
   const [seed, setSeed] = useState(0);
 
   useEffect(() => {
     if (!isRecording) {
+      setSeed(0);
       return;
     }
 
@@ -17,5 +19,7 @@ export const useWaveformAnimation = (isRecording: boolean) => {
     };
   }, [isRecording]);
 
-  return seed;
+  const markdown = useMemo(() => renderSyntheticWave(seed), [seed]);
+
+  return markdown;
 };

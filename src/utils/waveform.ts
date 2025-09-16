@@ -1,19 +1,11 @@
-export type RenderOptions = {
-	width?: number;
-	height?: number;
-	message?: string;
-	charset?: string[]; // dense -> sparse; expects at least 5 entries
-};
-
-// Classic waveform renderer with dense block characters and header message
+ // Classic waveform renderer with dense block characters and header message
 export function renderSyntheticWave(
 	seed = 0,
-	opts: RenderOptions = {},
 ): string {
-	const height = opts.height ?? 18;
-	const width = opts.width ?? 105;
-	const message = opts.message ?? "RECORDING AUDIO...  PRESS ENTER TO STOP";
-	const chars = opts.charset ?? ["█", "▓", "▒", "░", "·"]; // dense -> sparse
+	const height = 18;
+	const width = 105;
+	const message = "RECORDING AUDIO...  PRESS ENTER TO STOP";
+	const chars = ["█", "▓", "▒", "░", "·"]; // dense -> sparse
 
 	const barWidth = 2;
 	const barGap = 1;
