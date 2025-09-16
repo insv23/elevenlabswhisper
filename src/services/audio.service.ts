@@ -6,7 +6,6 @@ import {
 import { getPreferenceValues } from "@raycast/api";
 import path from "node:path";
 import type { Preferences } from "../types/preferences";
-import { storageService } from "./storage.service";
 
 export class SoxError extends Error {
 	constructor(
@@ -31,52 +30,7 @@ export type StartRecordingResult = {
 class AudioService {
 	private soxPath: string | null = null;
 
-	private async resolveSoxPath(): Promise<string> {
-		if (this.soxPath) return this.soxPath;
-
-		const prefs = getPreferenceValues<Preferences>();
-		const prefPath = prefs?.soxExecutablePath?.trim();
-		if (prefPath) {
-			if (!path.isAbsolute(prefPath)) {
-				throw new SoxError(
-					"Preference 'soxExecutablePath' must be an absolute path",
-					"PREF_NOT_ABSOLUTE",
-				);
-			}
-			await this.checkSoxAvailable(prefPath);
-			this.soxPath = prefPath;
-			return prefPath;
-		}
-
-		const candidates: CandidateSource[] = [
-			"homebrew-opt",
-			"homebrew-usr",
-			"path",
-		];
-		const candidatePaths: Record<CandidateSource, string> = {
-			"homebrew-opt": "/opt/homebrew/bin/sox",
-			"homebrew-usr": "/usr/local/bin/sox",
-			path: "sox",
-		};
-
-		for (const c of candidates) {
-			try {
-				const soxCandPath = candidatePaths[c];
-				await this.checkSoxAvailable(soxCandPath);
-				this.soxPath = soxCandPath;
-				return soxCandPath;
-			} catch {
-				// try next
-			}
-		}
-
-		throw new SoxError(
-			"SoX not found in common locations or PATH. Please install SoX or configure its path in preferences.",
-			"SOX_NOT_FOUND",
-		);
-	}
-
-	private async checkSoxAvailable(
+	private async _checkSoxAvailable(
 		pathOrCmd: string,
 		timeoutMs = 1200,
 	): Promise<void> {
@@ -110,12 +64,57 @@ class AudioService {
 		});
 	}
 
-	async initialize(): Promise<void> {
-		await this.resolveSoxPath();
-		await storageService.ensureRecordingsDir();
+	private async _resolveSoxPath(): Promise<string> {
+		if (this.soxPath) return this.soxPath;
+
+		const prefs = getPreferenceValues<Preferences>();
+		const prefPath = prefs?.soxExecutablePath?.trim();
+		if (prefPath) {
+			if (!path.isAbsolute(prefPath)) {
+				throw new SoxError(
+					"Preference 'soxExecutablePath' must be an absolute path",
+					"PREF_NOT_ABSOLUTE",
+				);
+			}
+			await this._checkSoxAvailable(prefPath);
+			this.soxPath = prefPath;
+			return prefPath;
+		}
+
+		const candidates: CandidateSource[] = [
+			"homebrew-opt",
+			"homebrew-usr",
+			"path",
+		];
+		const candidatePaths: Record<CandidateSource, string> = {
+			"homebrew-opt": "/opt/homebrew/bin/sox",
+			"homebrew-usr": "/usr/local/bin/sox",
+			path: "sox",
+		};
+
+		for (const c of candidates) {
+			try {
+				const soxCandPath = candidatePaths[c];
+				await this._checkSoxAvailable(soxCandPath);
+				this.soxPath = soxCandPath;
+				return soxCandPath;
+			} catch {
+				// try next
+			}
+		}
+
+		throw new SoxError(
+			"SoX not found in common locations or PATH. Please install SoX or configure its path in preferences.",
+			"SOX_NOT_FOUND",
+		);
 	}
 
-	private async cleanupOldSoxProcesses(): Promise<void> {
+	// Ensures SoX can be resolved and cached for future executions.
+	async ensureSoxAvailable(): Promise<void> {
+		await this._resolveSoxPath();
+	}
+
+	private async _cleanupOldSoxProcesses(): Promise<void> {
 		try {
 			const { stdout } = await new Promise<{ stdout: string; stderr: string }>(
 				(resolve, reject) => {
@@ -130,7 +129,7 @@ class AudioService {
 			let killedCount = 0;
 
 			for (const processLine of processes) {
-				if (this.isOurSoxProcess(processLine)) {
+				if (this._isOurSoxProcess(processLine)) {
 					const pid = Number.parseInt(processLine.split(" ")[0]);
 					if (!Number.isNaN(pid)) {
 						try {
@@ -167,7 +166,7 @@ class AudioService {
 		}
 	}
 
-	private isOurSoxProcess(processLine: string): boolean {
+	private _isOurSoxProcess(processLine: string): boolean {
 		const uniqueArgs = [
 			"--no-show-progress",
 			"-d",
@@ -183,9 +182,8 @@ class AudioService {
 
 	async start(options: { outputPath: string }): Promise<StartRecordingResult> {
 		// 先清理旧的 SoX 进程
-		await this.cleanupOldSoxProcesses();
+		await this._cleanupOldSoxProcesses();
 
-		const sox = await this.resolveSoxPath();
 		const { outputPath } = options;
 
 		const args = [
@@ -204,6 +202,7 @@ class AudioService {
 			outputPath,
 		];
 
+		const sox = await this._resolveSoxPath();
 		const proc = spawn(sox, args, { detached: true });
 		// Sox prints to stderr often; keep for debugging
 		proc.stderr.on("data", (data) => console.log(`sox stderr: ${data}`));

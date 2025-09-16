@@ -30,8 +30,14 @@
       "title": "Provider",
       "description": "Choose the transcription provider.",
       "data": [
-        { "title": "ElevenLabs", "value": "elevenlabs" },
-        { "title": "302.ai", "value": "ai302" }
+        {
+          "title": "ElevenLabs",
+          "value": "elevenlabs"
+        },
+        {
+          "title": "302.ai",
+          "value": "ai302"
+        }
       ],
       "defaultValue": "elevenlabs",
       "required": true
@@ -73,7 +79,9 @@
   ],
   "dependencies": {
     "@raycast/api": "^1.102.7",
-    "@raycast/utils": "^1.17.0"
+    "@raycast/utils": "^1.17.0",
+    "use-sync-external-store": "^1.5.0",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.0.4",
