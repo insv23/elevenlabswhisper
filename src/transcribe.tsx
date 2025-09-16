@@ -1,7 +1,7 @@
 import { Action, ActionPanel, Detail, Form, Keyboard, Clipboard, popToRoot } from "@raycast/api";
 import { useCallback } from "react";
 import { useTranscriptionActions, useTranscriptionState } from "./store/transcription.store";
-import { useAutoStart, useEnvironmentGate, useTranscriptionToasts, useWaveformAnimation } from "./hooks/transcribe";
+import { useAutoStart, useEnvironmentGate, useTranscriptionToasts, useWaveformAnimation, useTranscribeSpinner } from "./hooks/transcribe";
 
 export default function Command() {
   const state = useTranscriptionState();
@@ -16,6 +16,7 @@ export default function Command() {
     startRecording,
   });
   const waveformMarkdown = useWaveformAnimation(state.status === "recording");
+  const spinnerMarkdown = useTranscribeSpinner(state.status === "transcribing");
 
   const handleCancel = useCallback(() => {
     void cancelRecording();
@@ -73,9 +74,9 @@ export default function Command() {
   const getMarkdown = () => {
     switch (state.status) {
       case "recording":
-        return waveformMarkdown;
+        return waveformMarkdown || "## Recording...  \n\nPress Enter to stop and transcibe.";
       case "transcribing":
-        return "## Transcribing...\n\nPlease wait while we process your audio.";
+        return spinnerMarkdown || "## Transcribing...\n\nPlease wait while we process your audio.";
       case "transcribing_error":
         return `## Transcription Failed\n\n${
           state.error || "An error occurred during transcription."
