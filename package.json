@@ -71,7 +71,7 @@
       "name": "modelId",
       "type": "textfield",
       "title": "Model ID",
-      "placeholder": "scribe_v1 ",
+      "placeholder": "scribe_v1",
       "description": "Model identifier used by the provider.",
       "defaultValue": "scribe_v1",
       "required": false

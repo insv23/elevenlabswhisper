@@ -4,7 +4,7 @@ A Raycast extension that provides speech-to-text transcription using ElevenLabs'
 
 <div align="center">
   <img src="metadata/elevenlabswhisper-1.png" alt="Recording Interface" width="48%">
-  <img src="metadata/elevenlabswhisper-2.png" alt="Transcript Editor" width="48%">
+  <img src="metadata/elevenlabswhisper-3.png" alt="Transcript Editor" width="48%">
 </div>
 
 ## Features
@@ -24,8 +24,8 @@ A Raycast extension that provides speech-to-text transcription using ElevenLabs'
 - **Comprehensive error handling**: Robust error recovery and user feedback
 
 ### 🎯 User Experience
-- **Simple workflow**: Automatic recording start when extension opens
-- **Intuitive controls**: Enter to stop recording, Esc to cancel
+- **Simple workflow**: Recording auto-starts once environment checks pass
+- **Intuitive controls**: Enter stops recording, Cmd+Z cancels
 - **Visual feedback**: Clear state indicators and progress animations
 - **Session management**: Fresh state for each recording session
 
@@ -79,34 +79,47 @@ A Raycast extension that provides speech-to-text transcription using ElevenLabs'
 3. **Start recording**: Extension automatically begins recording when opened
 4. **Stop recording**: Press Enter to stop and start transcription
 5. **Review transcript**: Edit if needed before copying
-6. **Copy to clipboard**: Use the paste button to insert text
+6. **Copy or paste**: Use "Paste Edited Transcript" (pastes and copies) or "Copy Edited Transcript"
 
 ### Keyboard Shortcuts
 
-- **Enter**: Stop recording and start transcription
-- **Cmd+N**: Start new recording (from transcript view)
-- **Esc**: Cancel recording
+- **Enter**: Trigger the primary action (stop and transcribe while recording)
+- **Cmd+Z**: Cancel the current recording
+- **Cmd+N**: Start a new recording (from transcript view)
 
 ## Project Structure
 
 ```
 elevenlabswhisper/
 ├── src/
-│   ├── transcribe.tsx              # Main UI component
+│   ├── transcribe.tsx              # Main Raycast command UI
 │   ├── hooks/
-│   │   └── useTranscription.ts     # Transcription workflow logic
+│   │   └── transcribe/
+│   │       ├── index.ts            # Hook exports
+│   │       ├── types.ts            # Shared hook types
+│   │       ├── useAutoStart.ts     # Auto-start recording coordination
+│   │       ├── useEnvironmentGate.ts # Dependencies and preference guard
+│   │       ├── useTranscribeSpinner.ts # Animated markdown spinner frames
+│   │       ├── useTranscriptionToasts.ts # Toast notifications
+│   │       └── useWaveformAnimation.ts # Animated waveform markdown
 │   ├── services/
 │   │   ├── audio.service.ts        # SoX audio recording management
 │   │   ├── transcription.service.ts # API transcription services
 │   │   └── storage.service.ts      # File system operations
+│   ├── store/
+│   │   ├── transcription.store.ts  # Zustand state + workflow orchestration
+│   │   └── types.ts                # Store types and status enums
 │   ├── types/
-│   │   ├── index.ts                # Type exports
+│   │   ├── index.ts                # Shared type exports
 │   │   └── preferences.ts          # Preference definitions
 │   └── utils/
-│       ├── index.ts                # Utility exports
+│       ├── transcribeSpinner.ts    # Spinner frame generation
 │       └── waveform.ts             # ASCII waveform generation
 ├── docs/
-│   └── bugs/                       # Bug documentation
+│   ├── bugs/                       # Bug documentation snapshots
+│   ├── staging/                    # Staging notes and experiments
+│   ├── live-audio-waveform-spectrum.md
+│   └── transcribing-ascii-bubble-animation-plan.md
 ├── package.json                    # Project dependencies and scripts
 ├── tsconfig.json                   # TypeScript configuration
 └── CHANGELOG.md                    # Version history
@@ -115,10 +128,11 @@ elevenlabswhisper/
 ### Architecture Overview
 
 **Layered Architecture**:
-1. **UI Layer** (`transcribe.tsx`): Pure presentation and user interaction
-2. **Business Logic Layer** (`useTranscription.ts`): State management and workflow
-3. **Service Layer** (`services/`): Infrastructure and external system integration
-4. **Utility Layer** (`utils/`): Reusable helper functions
+1. **UI Layer** (`transcribe.tsx`): Raycast form/detail UI and user actions
+2. **State & Workflow Layer** (`store/transcription.store.ts`): Zustand store coordinating recording, transcription, and cleanup
+3. **Hook Layer** (`hooks/transcribe/`): Cross-cutting concerns (auto-start, environment gating, spinner/waveform animations, toasts)
+4. **Service Layer** (`services/`): Infrastructure integrations (SoX, storage, provider APIs)
+5. **Utility Layer** (`utils/`): Reusable helpers for waveform/spinner rendering
 
 **Key Components**:
 - **Audio Service**: Manages SoX process lifecycle with robust cleanup
@@ -139,12 +153,6 @@ elevenlabswhisper/
 
 ## Development
 
-### Scripts
-- `npm run dev`: Start development server
-- `npm run build`: Build for production
-- `npm run lint`: Run ESLint
-- `npm run type-check`: Run TypeScript type checking
-
 ### Technologies Used
 - **Raycast API**: Extension framework and UI components
 - **TypeScript**: Type-safe development
@@ -161,8 +169,7 @@ elevenlabswhisper/
 3. **Recording issues**: Check microphone permissions in macOS settings
 4. **Process cleanup**: Extension automatically handles SoX process termination
 
-### Debug Mode
-Enable debug logging by setting environment variables or checking Raycast's developer console for detailed error information.
+
 
 ## Contributing
 

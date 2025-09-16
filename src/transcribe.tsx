@@ -1,7 +1,13 @@
 import { Action, ActionPanel, Detail, Form, Keyboard, Clipboard, popToRoot } from "@raycast/api";
 import { useCallback } from "react";
 import { useTranscriptionActions, useTranscriptionState } from "./store/transcription.store";
-import { useAutoStart, useEnvironmentGate, useTranscriptionToasts, useWaveformAnimation, useTranscribeSpinner } from "./hooks/transcribe";
+import {
+  useAutoStart,
+  useEnvironmentGate,
+  useTranscriptionToasts,
+  useWaveformAnimation,
+  useTranscribeSpinner,
+} from "./hooks/transcribe";
 
 export default function Command() {
   const state = useTranscriptionState();
@@ -54,7 +60,7 @@ export default function Command() {
               onSubmit={async (values: { transcript?: string }) => {
                 const text = values?.transcript ?? "";
                 await Clipboard.paste(text);
-				await Clipboard.copy(text);
+                await Clipboard.copy(text);
                 await popToRoot();
               }}
             />
