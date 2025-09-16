@@ -27,6 +27,22 @@ export type StartRecordingResult = {
 	outputPath: string;
 };
 
+const SOX_ARG_SEGMENTS: ReadonlyArray<readonly string[]> = [
+	["--no-show-progress"],
+	["-d"],
+	["-t", "wav"],
+	["--channels", "1"],
+	["--rate", "16000"],
+	["--encoding", "signed-integer"],
+	["--bits", "16"],
+];
+
+const SOX_BASE_ARGS = SOX_ARG_SEGMENTS.flatMap((segment) => [...segment]);
+
+const SOX_PROCESS_MATCH_ARGS = SOX_ARG_SEGMENTS.map((segment) =>
+	segment.join(" "),
+);
+
 class AudioService {
 	private soxPath: string | null = null;
 
@@ -167,17 +183,7 @@ class AudioService {
 	}
 
 	private _isOurSoxProcess(processLine: string): boolean {
-		const uniqueArgs = [
-			"--no-show-progress",
-			"-d",
-			"-t wav",
-			"--channels 1",
-			"--rate 16000",
-			"--encoding signed-integer",
-			"--bits 16",
-		];
-
-		return uniqueArgs.every((arg) => processLine.includes(arg));
+		return SOX_PROCESS_MATCH_ARGS.every((arg) => processLine.includes(arg));
 	}
 
 	async start(options: { outputPath: string }): Promise<StartRecordingResult> {
@@ -186,21 +192,7 @@ class AudioService {
 
 		const { outputPath } = options;
 
-		const args = [
-			"--no-show-progress",
-			"-d",
-			"-t",
-			"wav",
-			"--channels",
-			"1",
-			"--rate",
-			"16000",
-			"--encoding",
-			"signed-integer",
-			"--bits",
-			"16",
-			outputPath,
-		];
+		const args = [...SOX_BASE_ARGS, outputPath];
 
 		const sox = await this._resolveSoxPath();
 		const proc = spawn(sox, args, { detached: true });
