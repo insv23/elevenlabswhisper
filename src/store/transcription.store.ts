@@ -6,6 +6,8 @@ import type { TranscriptionStatus, TranscriptionStore } from "./types";
 import { audioService, WAV_HEADER_SIZE } from "../services/audio.service";
 import { transcriptionService } from "../services/transcription.service";
 import { storageService } from "../services/storage.service";
+import { systemAudio } from "../services/system-audio.service";
+import { showToast, Toast } from "@raycast/api";
 
 const recordingFailedMessage = (message: string): string => `Recording failed: ${message}`;
 
@@ -17,6 +19,8 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
   _soxProcess: undefined,
   _currentFilePath: undefined,
   _transitionLock: false,
+  _muteSnapshot: undefined,
+  _muteFailNotified: false,
 
   startRecording: async () => {
     const state = get();
@@ -31,12 +35,28 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
         status: "recording",
         error: undefined,
         transcript: undefined,
+        _muteFailNotified: false,
       });
 
       await storageService.ensureRecordingsDir();
       const filename = storageService.getRecordingFilename();
       const outputPath = path.join(storageService.recordingsDir, filename);
       set({ _currentFilePath: outputPath });
+
+      // Apply system mute before starting the recorder
+      try {
+        const snapshot = await systemAudio.muteWithSnapshot();
+        set({ _muteSnapshot: snapshot });
+        if (snapshot.changed) {
+          void showToast(Toast.Style.Success, "System muted");
+        }
+      } catch {
+        const cur = get();
+        if (!cur._muteFailNotified) {
+          void showToast(Toast.Style.Failure, "Mute unavailable", "Grant Automation access in System Settings");
+          set({ _muteFailNotified: true });
+        }
+      }
 
       const { proc, outputPath: resolvedPath } = await audioService.start({
         outputPath,
@@ -45,9 +65,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
 
       proc.on("error", (error) => {
         console.error("SOX process error:", error);
-        const current = get();
-        current._cleanupSoxProcess();
-        current._cleanupFile();
+        void get()._cleanupAll();
         set({
           status: "idle",
           error: recordingFailedMessage(error instanceof Error ? error.message : "SOX process error"),
@@ -57,9 +75,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
       proc.on("exit", (code, signal) => {
         const currentState = get();
         if (currentState.status === "recording" && code !== 0) {
-          const cleanupState = get();
-          cleanupState._cleanupSoxProcess();
-          cleanupState._cleanupFile();
+          void get()._cleanupAll();
           set({
             status: "idle",
             error: recordingFailedMessage(`SOX exited unexpectedly (code=${code}, signal=${signal ?? "null"})`),
@@ -67,13 +83,12 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
         }
       });
     } catch (error) {
+      // If starting fails, ensure we restore mute state
+      await get()._cleanupAll();
       set({
         status: "idle",
         error: recordingFailedMessage((error as Error)?.message || "Failed to start recording"),
       });
-      const current = get();
-      current._cleanupSoxProcess();
-      current._cleanupFile();
       throw error;
     } finally {
       set({ _transitionLock: false });
@@ -90,6 +105,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
     const filePath = state._currentFilePath;
 
     if (!filePath) {
+      await get()._cleanupAll();
       set({
         status: "idle",
         error: recordingFailedMessage("Missing recording file path"),
@@ -101,9 +117,13 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
       await audioService.stop(proc);
       set({ _soxProcess: undefined });
 
+      // Restore mute state right after stopping capture
+      await get()._restoreMuteIfNeeded();
+
       const size = await storageService.getFileSize(filePath).catch(() => 0);
       if (size <= WAV_HEADER_SIZE) {
-        await storageService.deleteFile(filePath).catch(() => {});
+        get()._cleanupSoxProcess();
+        get()._cleanupFile();
         set({
           status: "idle",
           error: recordingFailedMessage("No audio was captured. The recording is empty."),
@@ -113,13 +133,11 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
         return;
       }
     } catch (error) {
+      await get()._cleanupAll();
       set({
         status: "idle",
         error: recordingFailedMessage((error as Error)?.message || "Failed to stop recording"),
       });
-      const current = get();
-      current._cleanupSoxProcess();
-      current._cleanupFile();
       return;
     }
 
@@ -174,9 +192,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
       }
     }
 
-    const current = get();
-    current._cleanupSoxProcess();
-    current._cleanupFile();
+    await get()._cleanupAll();
     set({
       status: "idle",
       error: undefined,
@@ -218,6 +234,26 @@ export const useTranscriptionStore = create<TranscriptionStore>()((set, get) => 
       storageService.deleteFile(filePath).catch(() => {});
       set({ _currentFilePath: undefined, filePath: undefined });
     }
+  },
+
+  _restoreMuteIfNeeded: async () => {
+    const state = get();
+    const snapshot = state._muteSnapshot;
+    if (!snapshot) return;
+    try {
+      const result = await systemAudio.restoreFromSnapshot(snapshot);
+      if (result === "restored" && snapshot.changed) {
+        void showToast(Toast.Style.Success, "Volume restored");
+      }
+    } finally {
+      set({ _muteSnapshot: undefined });
+    }
+  },
+
+  _cleanupAll: async () => {
+    await get()._restoreMuteIfNeeded();
+    get()._cleanupSoxProcess();
+    get()._cleanupFile();
   },
 }));
 

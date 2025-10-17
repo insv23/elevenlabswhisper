@@ -23,6 +23,7 @@ A Raycast extension that provides speech-to-text transcription using ElevenLabs'
 - **Intuitive controls**: Enter stops recording, Cmd+Z cancels
 - **Visual feedback**: Clear state indicators and progress animations
 - **Session management**: Fresh state for each recording session
+ - **Auto mute/restore**: System output is muted at recording start and restored at the end
 
 ## Get Started
 
@@ -75,6 +76,14 @@ A Raycast extension that provides speech-to-text transcription using ElevenLabs'
 4. **Stop recording**: Press Enter to stop and start transcription
 5. **Review transcript**: Edit if needed before copying
 6. **Copy or paste**: Use "Paste Edited Transcript" (pastes and copies) or "Copy Edited Transcript"
+
+### System Auto-Mute
+
+- When recording starts, the extension attempts to mute macOS system output using AppleScript.
+- When recording ends (including cancel or failure), it restores output if it had muted it.
+- If the system was already muted, no toast is shown and the state is left unchanged.
+- If mute fails due to permissions or automation restrictions, a one-time toast appears but recording proceeds normally.
+- Note: macOS may prompt for Automation permissions the first time; grant access for best results.
 
 ### Keyboard Shortcuts
 
